@@ -1,93 +1,54 @@
-using ImageKeep.Data.DataContext;
-using ImageKeep.Models;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using System.IO;
+using System.Threading.Tasks;
+using ImageKeep.Models;
+using Microsoft.AspNetCore.Http;
+using System;
+using ImageKeep.Data.DataContext;
 
 namespace ImageKeep.Controllers
 {
-    
-
-[Route("api/[controller]")]
-[ApiController]
-public class FotosController : ControllerBase
-{
-    private readonly DataContext _context;
-
-    public FotosController(DataContext context)
+    [ApiController]
+    [Route("api/[controller]")]
+    public class FotosController : ControllerBase
     {
-        _context = context;
-    }
+        private readonly DataContext _context;
+        private readonly IWebHostEnvironment _env;
 
-    [HttpGet]
-    public async Task<ActionResult<IEnumerable<Foto>>> GetFotos()
-    {
-        return await _context.Fotos.ToListAsync();
-    }
-
-    [HttpGet("{id}")]
-    public async Task<ActionResult<Foto>> GetFoto(int id)
-    {
-        var foto = await _context.Fotos.FindAsync(id);
-
-        if (foto == null)
+        public FotosController(DataContext context, IWebHostEnvironment env)
         {
-            return NotFound();
+            _context = context;
+            _env = env;
         }
 
-        return foto;
-    }
-
-    [HttpPost]
-    public async Task<ActionResult<Foto>> PostFoto(Foto foto)
-    {
-        _context.Fotos.Add(foto);
-        await _context.SaveChangesAsync();
-        return CreatedAtAction(nameof(GetFoto), new { id = foto.Id }, foto);
-    }
-
-    [HttpPut("{id}")]
-    public async Task<IActionResult> PutFoto(int id, Foto foto)
-    {
-        if (id != foto.Id)
+        [HttpPost]
+        public async Task<IActionResult> UploadFoto([FromForm] IFormFile arquivo, [FromForm] string titulo, [FromForm] string descricao)
         {
-            return BadRequest();
-        }
+            if (arquivo == null || arquivo.Length == 0)
+                return BadRequest("Arquivo não selecionado");
 
-        _context.Entry(foto).State = EntityState.Modified;
+            // Converte o arquivo de imagem em um array de bytes (byte[])
+            byte[] imagemBytes;
+            using (var memoryStream = new MemoryStream())
+            {
+                await arquivo.CopyToAsync(memoryStream);
+                imagemBytes = memoryStream.ToArray();
+            }
 
-        try
-        {
+            // Cria um objeto Foto com a imagem em BLOB
+            var foto = new Foto
+            {
+                Titulo = titulo,
+                Descricao = descricao,
+                Imagem = imagemBytes, // Armazena a imagem no banco como BLOB
+                DataUpload = DateTime.Now
+            };
+
+            // Salva a foto no banco de dados
+            _context.Fotos.Add(foto);
             await _context.SaveChangesAsync();
-        }
-        catch (DbUpdateConcurrencyException)
-        {
-            if (!_context.Fotos.Any(e => e.Id == id))
-            {
-                return NotFound();
-            }
-            else
-            {
-                throw;
-            }
-        }
 
-        return NoContent();
+            return Ok("Foto salva com sucesso");
+        }
     }
-
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> DeleteFoto(int id)
-    {
-        var foto = await _context.Fotos.FindAsync(id);
-        if (foto == null)
-        {
-            return NotFound();
-        }
-
-        _context.Fotos.Remove(foto);
-        await _context.SaveChangesAsync();
-
-        return NoContent();
-    }
-}
-
 }
